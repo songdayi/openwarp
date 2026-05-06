@@ -192,6 +192,16 @@ struct FontKey {
     index: u32,
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[cfg(target_os = "windows")]
+enum FallbackWarmupBucket {
+    Cjk,
+    Kana,
+    Hangul,
+    Emoji,
+    Other,
+}
+
 pub struct TextLayoutSystem {
     families: HashMap<FamilyId, Family>,
     /// The internal font database that stores all of our loaded fonts. Since internally,
@@ -211,6 +221,10 @@ pub struct TextLayoutSystem {
     loaded_font_ids_since_last_raster: RwLock<Vec<FontId>>,
     #[cfg(not(target_os = "windows"))]
     fallback_fonts: DashMap<FontId, Vec<FontId>>,
+    #[cfg(target_os = "windows")]
+    fallback_fonts: DashMap<(FontId, char), Vec<FontId>>,
+    #[cfg(target_os = "windows")]
+    warmed_fallback_buckets: DashMap<(FontId, FallbackWarmupBucket), ()>,
 }
 
 pub struct FontDB {
@@ -723,6 +737,23 @@ impl TextLayoutSystem {
     }
 
     #[cfg(target_os = "windows")]
+    fn fallback_warmup_bucket(ch: char) -> Option<FallbackWarmupBucket> {
+        if ch.is_ascii() {
+            return None;
+        }
+
+        Some(match ch as u32 {
+            0x4E00..=0x9FFF | 0x3400..=0x4DBF | 0xF900..=0xFAFF => FallbackWarmupBucket::Cjk,
+            0x3040..=0x30FF | 0x31F0..=0x31FF => FallbackWarmupBucket::Kana,
+            0xAC00..=0xD7AF | 0x1100..=0x11FF | 0x3130..=0x318F => {
+                FallbackWarmupBucket::Hangul
+            }
+            0x1F000..=0x1FAFF | 0x2600..=0x27BF => FallbackWarmupBucket::Emoji,
+            _ => FallbackWarmupBucket::Other,
+        })
+    }
+
+    #[cfg(target_os = "windows")]
     fn preload_fallback_fonts_for_text(
         &self,
         text: &str,
@@ -737,11 +768,21 @@ impl TextLayoutSystem {
             let end_byte_index = str_index_map.byte_index(range.end).unwrap_or(text.len());
 
             for ch in text[start_byte_index..end_byte_index].chars() {
-                if ch.is_ascii() || !seen.insert((selected_font, ch)) {
+                let Some(bucket) = Self::fallback_warmup_bucket(ch) else {
+                    continue;
+                };
+
+                if !seen.insert((selected_font, bucket))
+                    || self.warmed_fallback_buckets.contains_key(&(selected_font, bucket))
+                {
                     continue;
                 }
 
-                let _ = self.fallback_fonts(ch, selected_font);
+                let fallback_fonts = self.fallback_fonts(ch, selected_font);
+                if !fallback_fonts.is_empty() {
+                    self.warmed_fallback_buckets
+                        .insert((selected_font, bucket), ());
+                }
             }
         }
     }
@@ -1202,12 +1243,21 @@ impl TextLayoutSystem {
 
     #[cfg(target_os = "windows")]
     fn fallback_fonts(&self, character: char, font_id: FontId) -> Vec<FontId> {
-        self.get_fallback_fonts_for_character(character, font_id)
-            .map_err(|err| {
-                log::warn!("Unable to fetch fallback fonts for character {character:?}: {err:?}");
-                err
-            })
-            .unwrap_or_default()
+        match self.fallback_fonts.entry((font_id, character)) {
+            Entry::Occupied(entry) => entry.get().clone(),
+            Entry::Vacant(entry) => entry
+                .insert(
+                    self.get_fallback_fonts_for_character(character, font_id)
+                        .map_err(|err| {
+                            log::warn!(
+                                "Unable to fetch fallback fonts for character {character:?}: {err:?}"
+                            );
+                            err
+                        })
+                        .unwrap_or_default(),
+                )
+                .clone(),
+        }
     }
 
     fn font_metrics(&self, font_id: FontId) -> crate::fonts::Metrics {
