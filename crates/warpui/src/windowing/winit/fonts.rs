@@ -14,7 +14,7 @@ use warpui_core::fonts::{Style, Weight};
 use windows::loader;
 
 use std::any::Any;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::{DerefMut, Range};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -729,12 +729,18 @@ impl TextLayoutSystem {
         style_runs: &[(Range<usize>, StyleAndFont)],
         str_index_map: &StrIndexMap,
     ) {
+        let mut seen = HashSet::new();
+
         for (range, style_and_font) in style_runs {
             let selected_font = self.select_font(style_and_font.font_family, style_and_font.properties);
             let start_byte_index = str_index_map.byte_index(range.start).unwrap_or(text.len());
             let end_byte_index = str_index_map.byte_index(range.end).unwrap_or(text.len());
 
             for ch in text[start_byte_index..end_byte_index].chars() {
+                if ch.is_ascii() || !seen.insert((selected_font, ch)) {
+                    continue;
+                }
+
                 let _ = self.fallback_fonts(ch, selected_font);
             }
         }
