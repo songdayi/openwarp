@@ -1,3 +1,4 @@
+use chrono::Utc;
 use diesel::associations::HasTable;
 use diesel::{prelude::*, result::Error, SqliteConnection};
 use prost::Message;
@@ -13,6 +14,7 @@ use crate::persistence::schema::{self, agent_conversations, agent_tasks};
 struct NewAgentConversation {
     conversation_id: String,
     conversation_data: String,
+    last_modified_at: chrono::NaiveDateTime,
 }
 
 #[derive(Debug, Insertable, AsChangeset)]
@@ -50,6 +52,7 @@ pub(super) fn upsert_agent_conversation<'a>(
         let new_conversation = NewAgentConversation {
             conversation_id: conversation_id_param.to_owned(),
             conversation_data: serialized_conversation_data,
+            last_modified_at: Utc::now().naive_utc(),
         };
 
         diesel::insert_into(agent_conversations::table())

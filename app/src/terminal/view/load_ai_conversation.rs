@@ -1110,9 +1110,10 @@ impl TerminalView {
         if let Some(output) = exchange.output_status.output() {
             // Process code diffs for the AI block
             let ai_block_handle = restored_block_view_handle.clone();
-            // If we have command_block_index, we already have a real block for the requested command.
-            // So we only create the requested command block if command_block_index is None.
-            let should_create_requested_command_block = command_block_index.is_none();
+            // Always create the requested command backing block for restored conversations.
+            // The restored command block is what expanded requested-command headers reveal,
+            // even when the AI block itself is already positioned relative to an existing block.
+            let should_create_requested_command_block = true;
             ai_block_handle.update(ctx, |ai_block, block_ctx| {
                 self.process_restored_outputs(
                     ai_block,
