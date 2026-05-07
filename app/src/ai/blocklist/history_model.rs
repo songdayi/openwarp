@@ -101,8 +101,8 @@ impl From<&AIConversation> for AIConversationMetadata {
         let initial_query: String = conversation.initial_query().unwrap_or_default();
 
         let last_modified_at = conversation
-            .latest_exchange()
-            .map(|exchange| exchange.start_time.naive_utc())
+            .last_modified_at()
+            .map(|timestamp| timestamp.naive_utc())
             .unwrap_or_else(|| chrono::Utc::now().naive_utc());
 
         Self {
@@ -371,6 +371,17 @@ impl BlocklistAIHistoryModel {
     /// * The conversation has never been read into memory from db. Use load_conversation_from_db to handle reading from db.
     pub fn conversation(&self, conversation_id: &AIConversationId) -> Option<&AIConversation> {
         self.conversations_by_id.get(conversation_id)
+    }
+
+    /// Synchronously tries to resolve a conversation from in-memory state or the local DB.
+    /// This is useful for avoiding an intermediate loading UI when a historical conversation
+    /// exists locally and can be restored immediately.
+    pub fn load_local_conversation_data(
+        &self,
+        conversation_id: &AIConversationId,
+    ) -> Option<CloudConversationData> {
+        self.load_conversation_from_db(conversation_id)
+            .map(|conversation| CloudConversationData::Oz(Box::new(conversation)))
     }
 
     pub fn conversation_mut(
