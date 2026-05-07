@@ -2187,8 +2187,56 @@ impl BlockList {
     pub fn set_visibility_of_block_for_ai_action(
         &mut self,
         id: &AIAgentActionId,
+        ai_block_view_id: EntityId,
         is_visible: bool,
     ) {
+        let Some(block_index) = self.blocks.iter().position(|block| {
+            block
+                .requested_command_action_id()
+                .is_some_and(|action_id| action_id == id)
+        }) else {
+            return;
+        };
+
+        if is_visible
+            && !self.is_requested_command_block_immediately_after_ai_block(ai_block_view_id, id)
+        {
+            let block_index = BlockIndex(block_index);
+            if block_index != self.active_block_index() {
+                if let Some(block) = self.remove_block_at_index(block_index) {
+                    if let Some(ai_block_total_idx) = self
+                        .removable_blocklist_item_positions
+                        .get(&RemovableBlocklistItem::RichContent(ai_block_view_id))
+                        .copied()
+                    {
+                        let insertion_block_index: BlockIndex = {
+                            let mut cursor = self
+                                .block_heights
+                                .cursor::<TotalIndex, BlockHeightSummary>();
+                            cursor.seek(&ai_block_total_idx, SeekBias::Right);
+                            cursor.next();
+                            cursor.start().block_count.into()
+                        };
+
+                        self.blocks.insert(insertion_block_index.0, block);
+                        for index in BlockIndex::range_as_iter(
+                            insertion_block_index..BlockIndex(self.blocks.len()),
+                        ) {
+                            self.reset_internal_block_index(index);
+                        }
+
+                        let block_height = self.blocks[insertion_block_index.0]
+                            .height(&self.agent_view_state)
+                            .into();
+                        self.insert_non_block_item_before_block(
+                            insertion_block_index,
+                            BlockHeightItem::Block(block_height),
+                        );
+                    }
+                }
+            }
+        }
+
         let id = id.clone();
         self.update_blocks_and_sumtree(
             None,

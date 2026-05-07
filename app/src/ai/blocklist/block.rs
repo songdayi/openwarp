@@ -3097,6 +3097,7 @@ impl AIBlock {
 
                 ctx.emit(AIBlockEvent::UpdateInlineActionVisibility {
                     action_id: action_id.clone(),
+                    ai_block_view_id: self.view_id,
                     is_visible: *is_expanded,
                 });
                 ctx.notify();
@@ -5433,6 +5434,7 @@ pub enum AIBlockEvent {
     /// requested command. This covers both [`View`] and non-[`View`] inline action components.
     UpdateInlineActionVisibility {
         action_id: AIAgentActionId,
+        ai_block_view_id: EntityId,
         is_visible: bool,
     },
     ToggleCodeDiffVisibility,

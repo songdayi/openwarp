@@ -18324,12 +18324,13 @@ impl TerminalView {
             // -- Shared events ---------------------------------------------------------
             AIBlockEvent::UpdateInlineActionVisibility {
                 action_id,
+                ai_block_view_id,
                 is_visible,
             } => {
                 self.model
                     .lock()
                     .block_list_mut()
-                    .set_visibility_of_block_for_ai_action(action_id, *is_visible);
+                    .set_visibility_of_block_for_ai_action(action_id, *ai_block_view_id, *is_visible);
                 if !is_restored {
                     // Requested commands can auto-expand without user interaction so
                     // we only want to take focus if the terminal view is still focused.
