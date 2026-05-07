@@ -1388,8 +1388,9 @@ impl AgentConversationsModel {
             | BlocklistAIHistoryEvent::UpdatedAutoexecuteOverride { .. }
             | BlocklistAIHistoryEvent::UpdatedConversationMetadata { .. }
             // UpdatedStreamingExchange covers streaming and other exchange-level updates but
-            // doesn't change any ConversationNavigationData fields (title comes from
-            // UpdateTaskDescription, last_updated uses exchange.start_time which is set at append time).
+            // doesn't change any ConversationNavigationData fields. Navigation timestamps now
+            // come from conversation.last_modified_at(), which is updated through the persisted
+            // conversation state rather than exchange.start_time alone.
             | BlocklistAIHistoryEvent::UpdatedStreamingExchange { .. }
             | BlocklistAIHistoryEvent::ConversationServerTokenAssigned { .. }
             => {}

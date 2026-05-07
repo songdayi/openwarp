@@ -11203,6 +11203,9 @@ impl Workspace {
         conversation_id: AIConversationId,
         ctx: &mut ViewContext<Self>,
     ) {
+        let cached_conversation = BlocklistAIHistoryModel::as_ref(ctx)
+            .load_local_conversation_data(&conversation_id);
+
         let terminal_view_for_active_pane = self.active_session_view(ctx).filter(|_| {
             self.get_active_session_terminal_model(ctx)
                 .is_some_and(|model| !model.lock().shared_session_status().is_viewer())
@@ -11241,12 +11244,31 @@ impl Workspace {
             return;
         }
 
+        let terminal_view_for_closure = terminal_view.clone();
+        let window_id = ctx.window_id();
+
+        if let Some(conversation) = cached_conversation {
+            terminal_view_for_closure.update(ctx, |terminal_view, ctx| {
+                terminal_view
+                    .model
+                    .lock()
+                    .set_conversation_transcript_viewer_status(None);
+                terminal_view.restore_conversation_and_directory_context(
+                    conversation,
+                    FeatureFlag::AgentView.is_enabled(),
+                    |terminal_view, ctx| {
+                        terminal_view.redetermine_global_focus(ctx);
+                    },
+                    ctx,
+                );
+            });
+            return;
+        }
+
         let history_model = BlocklistAIHistoryModel::handle(ctx);
         let future = history_model
             .as_ref(ctx)
             .load_conversation_data(conversation_id, ctx);
-        let terminal_view_for_closure = terminal_view.clone();
-        let window_id = ctx.window_id();
         ctx.spawn(future, move |_workspace, conversation, ctx| {
             let Some(conversation) = conversation else {
                 log::warn!("Failed to load conversation {conversation_id}");
@@ -11294,6 +11316,11 @@ impl Workspace {
         conversation_id: AIConversationId,
         ctx: &mut ViewContext<Self>,
     ) {
+        let cached_conversation = BlocklistAIHistoryModel::as_ref(ctx)
+            .conversation(&conversation_id)
+            .cloned()
+            .map(|conversation| CloudConversationData::Oz(Box::new(conversation)));
+
         let window_id = ctx.window_id();
         let tab_pane_group = self.active_tab_pane_group().clone();
         let pane_group_id = tab_pane_group.id();
@@ -11305,6 +11332,19 @@ impl Workspace {
                 ctx,
             )
         });
+
+        if let Some(conversation) = cached_conversation {
+            if let Some(pane_group) = ctx.view_with_id::<PaneGroup>(window_id, pane_group_id) {
+                pane_group.update(ctx, |pane_group, ctx| {
+                    pane_group.replace_loading_pane_with_terminal(
+                        loading_pane_id,
+                        conversation,
+                        ctx,
+                    );
+                });
+            }
+            return;
+        }
 
         let history_model = BlocklistAIHistoryModel::handle(ctx);
         let future = history_model
@@ -11350,6 +11390,11 @@ impl Workspace {
         conversation_id: AIConversationId,
         ctx: &mut ViewContext<Self>,
     ) {
+        let cached_conversation = BlocklistAIHistoryModel::as_ref(ctx)
+            .conversation(&conversation_id)
+            .cloned()
+            .map(|conversation| CloudConversationData::Oz(Box::new(conversation)));
+
         let window_id = ctx.window_id();
 
         // Create a new tab with loading pane
@@ -11375,6 +11420,17 @@ impl Workspace {
         // Get both IDs from the NEW tab's pane group
         let pane_group_id = new_pane_group.id();
         let loading_pane_id = new_pane_group.as_ref(ctx).focused_pane_id(ctx);
+
+        if let Some(conversation) = cached_conversation {
+            new_pane_group.update(ctx, |pane_group, ctx| {
+                pane_group.replace_loading_pane_with_terminal(
+                    loading_pane_id,
+                    conversation,
+                    ctx,
+                );
+            });
+            return;
+        }
 
         let history_model = BlocklistAIHistoryModel::handle(ctx);
         let future = history_model

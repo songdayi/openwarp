@@ -77,8 +77,7 @@ impl ConversationNavigationData {
             .title()
             .unwrap_or_else(|| "Untitled conversation".to_string());
         let last_updated = conversation
-            .latest_exchange()
-            .map(|exchange| exchange.start_time)
+            .last_modified_at()
             .unwrap_or_else(chrono::Local::now);
 
         Self {
