@@ -325,8 +325,9 @@ impl TextLayoutSystem {
             font_id_map: Default::default(),
             font_selections: Default::default(),
             loaded_fonts: Default::default(),
-            #[cfg(not(target_os = "windows"))]
             fallback_fonts: Default::default(),
+            #[cfg(target_os = "windows")]
+            warmed_fallback_buckets: Default::default(),
             #[cfg(feature = "fontkit-rasterizer")]
             loaded_font_ids_since_last_raster: Default::default(),
         }
