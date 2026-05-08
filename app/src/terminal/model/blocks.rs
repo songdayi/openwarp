@@ -2209,14 +2209,9 @@ impl BlockList {
                         .get(&RemovableBlocklistItem::RichContent(ai_block_view_id))
                         .copied()
                     {
-                        let insertion_block_index: BlockIndex = {
-                            let mut cursor = self
-                                .block_heights
-                                .cursor::<TotalIndex, BlockHeightSummary>();
-                            cursor.seek(&ai_block_total_idx, SeekBias::Right);
-                            cursor.next();
-                            cursor.start().block_count.into()
-                        };
+                        let insertion_block_index = self
+                            .first_block_index_after_total_index(ai_block_total_idx)
+                            .unwrap_or(self.active_block_index());
 
                         self.blocks.insert(insertion_block_index.0, block);
                         for index in BlockIndex::range_as_iter(
@@ -2232,6 +2227,7 @@ impl BlockList {
                             insertion_block_index,
                             BlockHeightItem::Block(block_height),
                         );
+                        self.event_proxy.send_wakeup_event();
                     }
                 }
             }
@@ -2251,6 +2247,24 @@ impl BlockList {
             },
             |_| {},
         );
+    }
+
+    fn first_block_index_after_total_index(&self, total_index: TotalIndex) -> Option<BlockIndex> {
+        let mut cursor = self
+            .block_heights
+            .cursor::<TotalIndex, BlockHeightSummary>();
+        cursor.seek(&total_index, SeekBias::Right);
+        cursor.next();
+
+        while let Some(item) = cursor.item() {
+            if matches!(item, BlockHeightItem::Block(..)) {
+                return Some(cursor.start().block_count.into());
+            }
+
+            cursor.next();
+        }
+
+        None
     }
 
     pub fn toggle_visibility_of_block_for_env_var(&mut self, block_id: &str) {
